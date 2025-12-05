@@ -30,6 +30,7 @@ async function run() {
 
     const db = client.db("ParcelDB");
     const parcelCollection = db.collection("parcels");
+    const paymentCollection = db.collection('payments');
 
     // GET all parcels
     app.get("/parcels", async (req, res) => {
@@ -112,6 +113,24 @@ async function run() {
       }
     });
 
+    // track parcel 
+
+    app.post('/tracking', async (req, res) => {
+      const {tracking_id, id, status, message, update_by=''} = req.body;
+
+      const log ={
+        tracking_id,
+        id: id? new ObjectId(id): undefined,
+        status,
+        message,
+        update_by,
+        time: new Date(),
+      };
+
+      const result = await trackingCollection.insertOne(log);
+      res.send(result)
+    })
+
     // Payment
 
     app.post("/create-payment-intent", async (req, res) => {
@@ -134,6 +153,62 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
+
+    // Payment get
+    app.get('/payments', async (req, res) => {
+      try{
+        const userEmail = req.query.email;
+        const query = userEmail? {email : userEmail}: {};
+        const options = {sort: {paid_at: -1}};
+
+        const payments = await paymentCollection.find(query, options).toArray();
+        res.send(payments);
+      } catch(error){
+        console.error('Payment get failed', error);
+        res.status(500).json({error: error.message})
+      }
+    })
+
+    // record payment and update parcel status
+    app.post('/payments', async (req, res) => {
+      try{
+        const {id, email, amount, paymentMethod, transactionId} = req.body;
+
+        const updateResult = await parcelCollection.updateOne(
+          {_id: new ObjectId(id)},
+          {
+            $set: {
+              payment_status: 'paid'
+            }
+          }
+        );
+
+        if(updateResult.modifiedCount === 0){
+          return res.status(404).send({message: 'parcel not found or already paid'});
+        }
+
+        const paymentDoc = {
+          id,
+          email,
+          amount,
+          paymentMethod,
+          transactionId,
+          paid_at_string: new Date().toISOString(),
+          paid_at: new Date()
+        }
+
+        const paymentResult = await paymentCollection.insertOne(paymentDoc);
+
+        res.status(200).send({
+          message: 'Payment recorded and parcel marked as paid',
+          insertedId: paymentResult.insertedId,
+        })
+
+      } catch(error){
+        console.error('Payment post failed', error);
+        res.status(500).json({error: error.message});
+      }
+    })
 
     
   } catch (err) {
