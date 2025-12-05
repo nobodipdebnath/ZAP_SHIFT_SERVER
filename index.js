@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const admin = require("firebase-admin");
 
 dotenv.config();
 
@@ -12,6 +13,16 @@ const port = process.env.PORT || 3000;
 // MiddleWare
 app.use(cors());
 app.use(express.json());
+
+
+
+const serviceAccount = require("./firebase-admin-key.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.tqpiihv.mongodb.net/?appName=Cluster0`;
 
@@ -33,6 +44,28 @@ async function run() {
     const paymentCollection = db.collection('payments');
     const userCollection = db.collection('users');
 
+    // Custom middleWare
+    const verifyFireBaseToken = async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if(!authHeader){
+        return res.status(401).send({message: 'unauthorized access'})
+      }
+
+      const token = authHeader.split(' ')[1];
+      if(!token){
+        return res.status(401).send({message: 'unauthorized access'})
+      }
+
+      // verify the token
+      try{
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.decoded = decoded;
+        next();
+      }catch(error){
+        return res.status(403).send({message: 'forbidden access'});
+      }
+    }
+
 
     app.post('/users', async (req, res) => {
       const email = req.body.email;
@@ -46,19 +79,14 @@ async function run() {
       res.send(result);
     })
 
-    // GET all parcels
-    app.get("/parcels", async (req, res) => {
-      const parcels = await parcelCollection.find().toArray();
-      res.send(parcels);
-    });
-
     // parcel api
     // Get: all parcel of parcels by user (created by), sorted by latest
 
-    app.get("/parcels", async (req, res) => {
+    app.get("/parcels", verifyFireBaseToken, async (req, res) => {
       try {
         const userEmail = req.query.email;
         const query = userEmail ? { created_by: userEmail } : {};
+        
 
         const options = {
           sort: { createdAt: -1 },
@@ -129,21 +157,21 @@ async function run() {
 
     // track parcel 
 
-    app.post('/tracking', async (req, res) => {
-      const {tracking_id, id, status, message, update_by=''} = req.body;
+    // app.post('/tracking', async (req, res) => {
+    //   const {tracking_id, id, status, message, update_by=''} = req.body;
 
-      const log ={
-        tracking_id,
-        id: id? new ObjectId(id): undefined,
-        status,
-        message,
-        update_by,
-        time: new Date(),
-      };
+    //   const log ={
+    //     tracking_id,
+    //     id: id? new ObjectId(id): undefined,
+    //     status,
+    //     message,
+    //     update_by,
+    //     time: new Date(),
+    //   };
 
-      const result = await trackingCollection.insertOne(log);
-      res.send(result)
-    })
+    //   const result = await trackingCollection.insertOne(log);
+    //   res.send(result)
+    // })
 
     // Payment
 
@@ -169,7 +197,7 @@ async function run() {
     });
 
     // Payment get
-    app.get('/payments', async (req, res) => {
+    app.get('/payments', verifyFireBaseToken, async (req, res) => {
       try{
         const userEmail = req.query.email;
         const query = userEmail? {email : userEmail}: {};
