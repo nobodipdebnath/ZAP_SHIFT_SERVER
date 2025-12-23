@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const nodemailer = require("nodemailer");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
 
@@ -597,6 +598,63 @@ async function run() {
       } catch (error) {
         console.error("Failed to fetch payments:", error);
         res.status(500).send({ message: "Failed to fetch payments" });
+      }
+    });
+
+    app.post("/contact", async (req, res) => {
+      const { name, email, message } = req.body;
+
+      try {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: process.env.ZAP_EMAIL,
+            pass: process.env.ZAP_PASS,
+          },
+        });
+
+        const htmlTemplate = `
+      <div style="font-family: Arial, sans-serif; background:#f4f6f8; padding:30px">
+        <div style="max-width:600px; margin:auto; background:white; border-radius:10px; overflow:hidden">
+          
+          <div style="background:#16a34a; color:white; padding:20px">
+            <h2 style="margin:0">📩 New Contact Message</h2>
+          </div>
+
+          <div style="padding:20px">
+            <p style="font-size:16px"><strong>Name:</strong> ${name}</p>
+            <p style="font-size:16px"><strong>Email:</strong> ${email}</p>
+
+            <div style="margin-top:20px; padding:15px; background:#f1f5f9; border-left:4px solid #16a34a">
+              <p style="margin:0; font-size:15px; line-height:1.6">
+                ${message}
+              </p>
+            </div>
+
+            <p style="margin-top:30px; font-size:14px; color:#6b7280">
+              This message was sent from your zap shift parcel website contact form.
+            </p>
+          </div>
+
+          <div style="background:#f9fafb; text-align:center; padding:15px; font-size:13px; color:#9ca3af">
+            © ${new Date().getFullYear()} Your Website
+          </div>
+        </div>
+      </div>
+    `;
+
+        await transporter.sendMail({
+          from: `"${name}" <${process.env.ZAP_EMAIL}>`, // ✅ user name
+          replyTo: email, // ✅ reply goes to user
+          to: process.env.ZAP_EMAIL,
+          subject: "New Contact Message",
+          html: htmlTemplate, // ✅ styled email
+        });
+
+        res.send({ success: true });
+      } catch (error) {
+        console.error("Email Error:", error);
+        res.status(500).send({ success: false });
       }
     });
 
