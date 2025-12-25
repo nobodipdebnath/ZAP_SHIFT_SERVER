@@ -139,7 +139,10 @@ async function run() {
         return res.status(404).send({ message: "User not found" });
       }
 
-      res.send({ role: user.role || "user" });
+      res.send({ 
+        role: user.role || "user",
+        created_at: user.created_at || "No Shear"
+       });
     });
 
     app.patch(
