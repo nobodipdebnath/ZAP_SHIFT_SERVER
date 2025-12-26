@@ -139,10 +139,10 @@ async function run() {
         return res.status(404).send({ message: "User not found" });
       }
 
-      res.send({ 
+      res.send({
         role: user.role || "user",
-        created_at: user.created_at || "No Shear"
-       });
+        created_at: user.created_at || "No Shear",
+      });
     });
 
     app.patch(
@@ -179,6 +179,23 @@ async function run() {
       } catch (error) {
         console.error("Rider creation failed:", error);
         res.status(500).send({ message: "Failed to create rider" });
+      }
+    });
+
+    app.get("/riders/email/:email", verifyFireBaseToken, async (req, res) => {
+      const email = req.params.email;
+
+      try {
+        const rider = await ridersCollection.findOne({ email });
+
+        if (!rider) {
+          return res.status(404).send({ message: "Rider not found" });
+        }
+
+        res.status(200).send(rider);
+      } catch (error) {
+        console.error("Failed to fetch rider:", error);
+        res.status(500).send({ message: "Failed to fetch rider" });
       }
     });
 
